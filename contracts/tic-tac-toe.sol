@@ -93,7 +93,7 @@ contract TicTacToe {
         require(gameActive == true, "Game is not active");
         require(msg.sender == player1 || msg.sender == player2, "You are not playing");
         require(msg.sender != activePlayer, "It's your turn");
-        require(block.timestamp-lastMoveTime > timeoutSec, "Opponent hasn't time out yet");  
+        require(elapsedTime() > timeoutSec, "Opponent hasn't time out yet");  
         emit GameOver(msg.sender);
         resetGame();
     }
@@ -107,5 +107,10 @@ contract TicTacToe {
         player1 = address(0);
         player2 = address(0);
         activePlayer = address(0);
+    }
+
+    function elapsedTime() public view returns(uint){
+        require(gameActive == true, "Game is not active");
+        return block.timestamp-lastMoveTime;
     }
 }
