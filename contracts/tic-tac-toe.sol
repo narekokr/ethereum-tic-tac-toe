@@ -5,8 +5,10 @@ contract TicTacToe {
     address public player1;
     address public player2;
     address public activePlayer;
-    bool public gameStarted;
+    //bool public gameStarted;      I don't understand use of gameStarted because gameActive should do the same (Maybe I'm wrong)
     bool public gameActive;
+    uint public lastMoveTime;
+    uint public timeoutSec = 10;
     
     // Board: 0 = empty, 1 = Player 1 (X), 2 = Player 2 (O)
     uint8[9] public board;
@@ -20,7 +22,8 @@ contract TicTacToe {
 
     // Players call this to join the game
     function joinGame() public {
-        require(!gameStarted, "Game already full");
+        //require(!gameStarted, "Game already full");
+        require(!gameActive, "Game already full");
         require(msg.sender != player1, "Already joined");
 
         if (player1 == address(0)) {
@@ -28,10 +31,11 @@ contract TicTacToe {
             emit PlayerJoined(msg.sender, 1);
         } else {
             player2 = msg.sender;
-            gameStarted = true;
+            //gameStarted = true;
             gameActive = true;
             activePlayer = player1; // Player 1 starts
             emit PlayerJoined(msg.sender, 2);
+            lastMoveTime = block.timestamp;
         }
     }
 
@@ -44,12 +48,13 @@ contract TicTacToe {
         board[position] = (msg.sender == player1) ? 1 : 2;
         emit MoveMade(msg.sender, position);
 
+        lastMoveTime = block.timestamp;
         if (checkWinner()) {
-            gameActive = false;
             emit GameOver(msg.sender);
+            resetGame();
         } else if (isBoardFull()) {
-            gameActive = false;
             emit GameOver(address(0)); // Draw
+            resetGame();
         } else {
             activePlayer = (activePlayer == player1) ? player2 : player1;
         }
@@ -82,5 +87,25 @@ contract TicTacToe {
 
     function getBoard() public view returns (uint8[9] memory) {
         return board;
+    }
+
+    function claimWin() public {
+        require(gameActive == true, "Game is not active");
+        require(msg.sender == player1 || msg.sender == player2, "You are not playing");
+        require(msg.sender != activePlayer, "It's your turn");
+        require(block.timestamp-lastMoveTime > timeoutSec, "Opponent hasn't time out yet");  
+        emit GameOver(msg.sender);
+        resetGame();
+    }
+
+    // Stop game, clear board and clear players
+    function resetGame() private {
+        gameActive = false;
+        for (uint i=0; i<=8; i++){
+            board[i] = 0;
+        }
+        player1 = address(0);
+        player2 = address(0);
+        activePlayer = address(0);
     }
 }
