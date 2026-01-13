@@ -9,6 +9,7 @@ contract TicTacToe {
     bool public gameActive;
     uint public lastMoveTime;
     uint public timeoutSec = 10;
+    uint public buyin = 1 ether;
     
     // Board: 0 = empty, 1 = Player 1 (X), 2 = Player 2 (O)
     uint8[9] public board;
@@ -21,10 +22,13 @@ contract TicTacToe {
     constructor() {}
 
     // Players call this to join the game
-    function joinGame() public {
+    function joinGame() public payable {
         //require(!gameStarted, "Game already full");
         require(!gameActive, "Game already full");
         require(msg.sender != player1, "Already joined");
+        require(msg.value == buyin, "You must pay the buy-in");
+
+        address(this).call{value: msg.value};
 
         if (player1 == address(0)) {
             player1 = msg.sender;
@@ -50,9 +54,12 @@ contract TicTacToe {
 
         lastMoveTime = block.timestamp;
         if (checkWinner()) {
+            msg.sender.call{value: address(this).balance}("");
             emit GameOver(msg.sender);
             resetGame();
         } else if (isBoardFull()) {
+            player1.call{value: address(this).balance/2}("");
+            player2.call{value: address(this).balance}("");
             emit GameOver(address(0)); // Draw
             resetGame();
         } else {
@@ -94,6 +101,7 @@ contract TicTacToe {
         require(msg.sender == player1 || msg.sender == player2, "You are not playing");
         require(msg.sender != activePlayer, "It's your turn");
         require(elapsedTime() > timeoutSec, "Opponent hasn't time out yet");  
+        msg.sender.call{value: address(this).balance}("");
         emit GameOver(msg.sender);
         resetGame();
     }
