@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TicTacToe Web3 Professional</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .cell { height: 90px; width: 90px; display: flex; align-items: center; justify-content: center; font-size: 2rem; }
+        .glass { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); }
+        .loader { border-top-color: #4f46e5; animation: spinner 1.5s linear infinite; }
+        @keyframes spinner { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-slate-900 to-indigo-900 min-h-screen flex items-center justify-center p-4">
+    <div id="root" class="w-full max-w-xl"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // --- UPDATE THESE TWO ---
+        const CONTRACT_ADDRESS = "0xC9875245Df7cFEAFcFa53F8B3ba3D4DB67743d08";
+        const ABI = [
+            "function createGame(uint256 buyin2) public payable",
+            "function joinGame(uint256 id) public payable",
+            "function leavePendingGame() public",
+            "function makeMove(uint8 position) public",
+            "function getPendingGames() public view returns (tuple(uint256 id, uint256 buyin)[])",
+            "function playerToGame(address) public view returns (uint256)",
+            "function getBoard() public view returns (uint8[9] memory)",
+            "function games(uint256) public view returns (address p1, address p2, address active, bool activeB, uint256 time, uint256 buyin, uint8[9] board)"
+        ];
+
+          function App() {
+              const [account, setAccount] = useState(null);
+              const [pendingGames, setPendingGames] = useState([]);
+              const [currentGameId, setCurrentGameId] = useState(0);
+              const [board, setBoard] = useState(Array(9).fill(0));
+              const [loading, setLoading] = useState(false);
+
+              // FIX: This runs every time the app loads
+              useEffect(() => {
+                  const autoConnect = async () => {
+                      if (window.ethereum) {
+                          const provider = new ethers.BrowserProvider(window.ethereum);
+                          const accounts = await provider.listAccounts();
+                          if (accounts.length > 0) {
+                              const addr = accounts[0].address;
+                              setAccount(addr);
+                              // Explicitly fetch the game ID for this address
+                              syncStatus(addr);
+                          }
+                      }
+                  };
+                  autoConnect();
+              }, []);
+
+              // FIX: Split syncStatus so it can be called anywhere
+              async function syncStatus(addr) {
+                  if (!addr) return;
+                  try {
+                      const provider = new ethers.BrowserProvider(window.ethereum);
+                      const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, provider);
+
+                      // This is the source of truth
+                      const id = await contract.playerToGame(addr);
+                      const numericId = Number(id);
+
+                      console.log("Current Game ID for user:", numericId);
+
+                      if (numericId !== 0) {
+                          setCurrentGameId(numericId);
+                          const b = await contract.getBoard();
+                          setBoard(Array.from(b));
+                      } else {
+                          setCurrentGameId(0);
+                          loadLobby();
+                      }
+                  } catch (e) {
+                      console.error("Sync failed", e);
+                  }
+              }
+
+              // Keep the lobby updated every few seconds
+              useEffect(() => {
+                  const interval = setInterval(() => {
+                      if (currentGameId === 0) loadLobby();
+                      else fetchBoard();
+                  }, 5000);
+                  return () => clearInterval(interval);
+              }, [currentGameId, account]);
+
+            async function connectWallet() {
+                if (!window.ethereum) return alert("Install MetaMask");
+                const provider = new ethers.BrowserProvider(window.ethereum);
+                const accounts = await provider.send("eth_requestAccounts", []);
+                setAccount(accounts[0]);
+            }
+
+// 1. Improved User Status Check
+              async function checkUserStatus(userAddress) {
+                  if (!userAddress) return;
+                  try {
+                      const provider = new ethers.BrowserProvider(window.ethereum);
+                      const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, provider);
+
+                      // Ask the contract: "Is this address tied to a game ID?"
+                      const id = await contract.playerToGame(userAddress);
+                      const gameId = Number(id);
+
+                      if (gameId !== 0) {
+                          console.log("Rejoining game:", gameId);
+                          setCurrentGameId(gameId);
+                          // Fetch the board immediately so it's not empty
+                          const b = await contract.getBoard();
+                          setBoard(Array.from(b));
+                      } else {
+                          setCurrentGameId(0);
+                      }
+                  } catch (e) {
+                      console.error("Error recovering session:", e);
+                  }
+              }
+
+              // 2. The "Auto-Reconnect" Effect
+     
+
+            async function loadLobby() {
+                try {
+                    const provider = new ethers.BrowserProvider(window.ethereum);
+                    const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, provider);
+                    const list = await contract.getPendingGames();
+                    setPendingGames(list);
+                } catch (e) { console.error("Lobby error", e); }
+            }
+
+            async function fetchBoard() {
+                try {
+                    const provider = new ethers.BrowserProvider(window.ethereum);
+                    const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, provider);
+                    const b = await contract.getBoard();
+                    setBoard(Array.from(b));
+                } catch (e) { console.log("Not in active game board yet"); }
+            }
+
+            async function handleCreateGame() {
+                const buyin = prompt("Enter stake in ETH (e.g. 0.1)", "0.1");
+                if (!buyin) return;
+                setLoading(true);
+                try {
+                    const provider = new ethers.BrowserProvider(window.ethereum);
+                    const signer = await provider.getSigner();
+                    const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+                    const val = ethers.parseEther(buyin);
+                    const tx = await contract.createGame(val, { value: val });
+                    await tx.wait();
+                    await checkUserStatus(); // Auto-join view
+                } catch (e) { alert("Error creating game"); }
+                setLoading(false);
+            }
+
+            async function handleJoinGame(id, buyin) {
+                setLoading(true);
+                try {
+                    const provider = new ethers.BrowserProvider(window.ethereum);
+                    const signer = await provider.getSigner();
+                    const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+                    const tx = await contract.joinGame(id, { value: buyin });
+                    await tx.wait();
+                    await checkUserStatus();
+                } catch (e) { alert("Error joining game"); }
+                setLoading(false);
+            }
+
+            async function handleLeave() {
+                setLoading(true);
+                try {
+                    const provider = new ethers.BrowserProvider(window.ethereum);
+                    const signer = await provider.getSigner();
+                    const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+                    const tx = await contract.leavePendingGame();
+                    await tx.wait();
+                    setCurrentGameId(0);
+                    setBoard(Array(9).fill(0));
+                } catch (e) { alert("Cannot leave active game"); }
+                setLoading(false);
+            }
+
+            async function makeMove(i) {
+                if (board[i] !== 0) return;
+                setLoading(true);
+                try {
+                    const provider = new ethers.BrowserProvider(window.ethereum);
+                    const signer = await provider.getSigner();
+                    const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+                    const tx = await contract.makeMove(i);
+                    await tx.wait();
+                    fetchBoard();
+                } catch (e) { alert("Not your turn!"); }
+                setLoading(false);
+            }
+
+            // UI HELPERS
+            const isWaiting = board.every(v => v === 0);
+
+            return (
+                <div class="glass p-8 rounded-3xl shadow-2xl relative overflow-hidden">
+                    {/* Header */}
+                    <div class="flex justify-between items-center mb-8">
+                        <div>
+                            <h1 class="text-2xl font-black text-slate-800 tracking-tighter">TIC-TAC-TOE</h1>
+                            <div class="h-1 w-12 bg-indigo-500 rounded-full"></div>
+                        </div>
+                        {!account ? (
+                            <button onClick={connectWallet} class="bg-indigo-600 text-white px-6 py-2 rounded-full font-bold shadow-lg shadow-indigo-200 hover:scale-105 transition">Connect Wallet</button>
+                        ) : (
+                            <div class="text-right">
+                                <p class="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Connected As</p>
+                                <p class="text-xs font-mono font-bold text-indigo-600">{account.slice(0,6)}...{account.slice(-4)}</p>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Content Section */}
+                    {account && (
+                        currentGameId === 0 ? (
+                            /* LOBBY VIEW */
+                            <div class="animate-fadeIn">
+                                <div class="flex justify-between items-center mb-6">
+                                    <h2 class="text-lg font-bold text-slate-700">Open Lobby</h2>
+                                    <button onClick={handleCreateGame} class="bg-slate-800 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-slate-700">Create Game</button>
+                                </div>
+                                <div class="space-y-3 max-h-64 overflow-y-auto pr-2">
+                                    {pendingGames.length === 0 ? (
+                                        <div class="text-center py-12 border-2 border-dashed border-gray-100 rounded-2xl">
+                                            <p class="text-gray-400">No pending games found</p>
+                                        </div>
+                                    ) : (
+                                        pendingGames.map((g, idx) => (
+                                            <div key={idx} class="flex justify-between items-center p-4 bg-gray-50 rounded-2xl border border-gray-100 hover:border-indigo-200 transition">
+                                                <div>
+                                                    <p class="font-bold text-slate-800">Game #{g[0].toString()}</p>
+                                                    <p class="text-xs text-indigo-500 font-bold">{ethers.formatEther(g[1])} ETH Stake</p>
+                                                </div>
+                                                <button onClick={() => handleJoinGame(g[0], g[1])} class="bg-white text-indigo-600 border border-indigo-100 px-4 py-2 rounded-xl font-bold text-sm shadow-sm hover:bg-indigo-50">Join Match</button>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+                        ) : (
+                            /* GAME VIEW */
+                            <div class="text-center animate-fadeIn">
+                                <div class="mb-6">
+                                    <span class="bg-indigo-100 text-indigo-700 px-4 py-1 rounded-full text-xs font-bold">Game ID: #{currentGameId}</span>
+                                    <h2 class="text-xl font-bold mt-2">{isWaiting ? "Waiting for Opponent..." : "Match in Progress"}</h2>
+                                </div>
+
+                                <div class="grid grid-cols-3 gap-3 w-72 mx-auto mb-8">
+                                    {board.map((cell, i) => (
+                                        <div key={i} onClick={() => makeMove(i)} class="cell bg-slate-50 border-2 border-white rounded-2xl shadow-inner hover:bg-white hover:border-indigo-200 transition-all active:scale-90 cursor-pointer">
+                                            {cell == 1 ? <span class="text-indigo-600 font-black">X</span> : cell == 2 ? <span class="text-rose-500 font-black">O</span> : ''}
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div class="flex flex-col gap-3">
+                                    <button onClick={fetchBoard} class="text-slate-400 text-xs font-bold hover:text-indigo-500 transition">Manually Sync Board</button>
+                                    {isWaiting && (
+                                        <button onClick={handleLeave} class="bg-rose-50 text-rose-600 py-3 rounded-2xl font-bold text-sm hover:bg-rose-100 transition">Leave & Refund ETH</button>
+                                    )}
+                                </div>
+                            </div>
+                        )
+                    )}
+
+                    {/* Loading Overlay */}
+                    {loading && (
+                        <div class="absolute inset-0 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center z-50 rounded-3xl">
+                            <div class="loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-12 w-12 mb-4"></div>
+                            <p class="font-bold text-slate-800">Mining Transaction...</p>
+                            <p class="text-xs text-gray-500">Please check MetaMask</p>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
