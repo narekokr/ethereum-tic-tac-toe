@@ -184,21 +184,35 @@ contract TicTacToe {
 
     function checkWinner() private view returns (bool) {
         uint id = playerToGame[msg.sender];
-        uint8[3][8] memory winPatterns = [
-            [0, 1, 2], [3, 4, 5], [6, 7, 8], // Rows
-            [0, 3, 6], [1, 4, 7], [2, 5, 8], // Cols
-            [0, 4, 8], [2, 4, 6]             // Diagonals
-        ];
-        uint8 playerVal = (games[id].activePlayer == games[id].player1) ? 1 : 2;
+        // Load board into memory for cheaper access
+        uint8[9] memory b = games[id].board;
+        // Determine if we are checking for Player 1 (1) or Player 2 (2)
+        uint8 p = (games[id].activePlayer == games[id].player1) ? 1 : 2;
 
-        for (uint i = 0; i < 8; i++) {
-            if (games[id].board[winPatterns[i][0]] == playerVal &&
-                games[id].board[winPatterns[i][1]] == playerVal &&
-                games[id].board[winPatterns[i][2]] == playerVal) {
-                return true;
-            }
-        }
-        return false;
+        // Mathematical Calculation (Bitmasking):
+        // Convert the board state into a single binary integer (mask).
+        // If player occupies position 'i', we add 2^i to the mask.
+        // This is done using bitwise OR (|) and bit shifting (<<).
+        uint16 mask = 
+            (b[0] == p ? uint16(1) : 0)      | 
+            (b[1] == p ? uint16(2) : 0)      | 
+            (b[2] == p ? uint16(4) : 0)      | 
+            (b[3] == p ? uint16(8) : 0)      | 
+            (b[4] == p ? uint16(16) : 0)     | 
+            (b[5] == p ? uint16(32) : 0)     | 
+            (b[6] == p ? uint16(64) : 0)     | 
+            (b[7] == p ? uint16(128) : 0)    | 
+            (b[8] == p ? uint16(256) : 0);
+
+        // Check against the 8 winning patterns:
+        // Rows:       0,1,2 (7)   | 3,4,5 (56)   | 6,7,8 (448)
+        // Columns:    0,3,6 (73)  | 1,4,7 (146)  | 2,5,8 (292)
+        // Diagonals:  0,4,8 (273) | 2,4,6 (84)
+        return (
+            (mask & 7 == 7)     || (mask & 56 == 56)   || (mask & 448 == 448) || 
+            (mask & 73 == 73)   || (mask & 146 == 146) || (mask & 292 == 292) ||
+            (mask & 273 == 273) || (mask & 84 == 84)
+        );
     }
 
     function isBoardFull() private view returns (bool) {
