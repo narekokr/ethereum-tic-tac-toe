@@ -2,3 +2,6 @@ node_modules
 .git
 artifacts
 .states
+.idea
+.claude
+cache

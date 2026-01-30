@@ -30,9 +30,9 @@ contract TicTacToe {
         uint8[9] board;
     }
     //id to game mapping
-    mapping(uint => Game) games;
+    mapping(uint => Game) public games;
 
-    mapping(address => uint) playerToGame;
+    mapping(address => uint) public playerToGame;
     
     // uint public lastMoveTime;
     uint public timeoutSec = 5 minutes; // Set to 5 mins for realistic block times
