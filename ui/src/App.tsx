@@ -15,6 +15,8 @@ import {
   joinGame,
   leavePendingGame,
   makeMove,
+  claimWin,
+  getTimeUntilTimeout,
   type PendingGame,
 } from './hooks/useContract';
 
@@ -25,6 +27,10 @@ function App() {
   const [board, setBoard] = useState<number[]>(Array(9).fill(0));
   const [loading, setLoading] = useState(false);
   const [waitingForOpponent, setWaitingForOpponent] = useState(false);
+  const [playerSymbol, setPlayerSymbol] = useState<'X' | 'O' | null>(null);
+  const [isMyTurn, setIsMyTurn] = useState(false);
+  const [canClaimWin, setCanClaimWin] = useState(false);
+  const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
 
   const loadLobby = useCallback(async () => {
     try {
@@ -52,17 +58,25 @@ function App() {
       if (numericId !== 0) {
         setCurrentGameId(numericId);
         const gameDetails = await getGameDetails(numericId);
-        console.log(gameDetails, 'yeahhh');
         const gameStarted = isGameActive(gameDetails);
         setWaitingForOpponent(!gameStarted);
 
-        if (gameStarted) {
+        if (gameStarted && gameDetails) {
+          const isPlayer1 = gameDetails.player1.toLowerCase() === addr.toLowerCase();
+          setPlayerSymbol(isPlayer1 ? 'X' : 'O');
+          const myTurn = gameDetails.activePlayer.toLowerCase() === addr.toLowerCase();
+          setIsMyTurn(myTurn);
+          setCanClaimWin(false); // Reset on game start
+          const timeLeft = await getTimeUntilTimeout();
+          setTimeRemaining(timeLeft);
           const b = await getBoard();
           setBoard(b);
         }
       } else {
         setCurrentGameId(0);
         setWaitingForOpponent(false);
+        setPlayerSymbol(null);
+        setIsMyTurn(false);
         void loadLobby();
       }
     } catch (e) {
@@ -84,15 +98,21 @@ function App() {
 
   // Check for opponent joining
   const checkForOpponent = useCallback(async () => {
-    if (currentGameId === 0) return;
+    if (currentGameId === 0 || !account) return;
     const gameDetails = await getGameDetails(currentGameId);
     const gameStarted = isGameActive(gameDetails);
-    if (gameStarted && waitingForOpponent) {
+    if (gameStarted && waitingForOpponent && gameDetails) {
       setWaitingForOpponent(false);
+      const isPlayer1 = gameDetails.player1.toLowerCase() === account.toLowerCase();
+      setPlayerSymbol(isPlayer1 ? 'X' : 'O');
+      setIsMyTurn(gameDetails.activePlayer.toLowerCase() === account.toLowerCase());
+      setCanClaimWin(false); // Reset when game starts
+      const timeLeft = await getTimeUntilTimeout();
+      setTimeRemaining(timeLeft);
       const b = await getBoard();
       setBoard(b);
     }
-  }, [currentGameId, waitingForOpponent]);
+  }, [currentGameId, waitingForOpponent, account]);
 
   // Polling for updates
   useEffect(() => {
@@ -111,8 +131,31 @@ function App() {
             setCurrentGameId(0);
             setBoard(Array(9).fill(0));
             setWaitingForOpponent(false);
+            setPlayerSymbol(null);
+            setIsMyTurn(false);
+            setCanClaimWin(false);
+            setTimeRemaining(null);
             void loadLobby();
             return;
+          }
+          // Update turn status and timeout
+          const gameDetails = await getGameDetails(gameId);
+          if (gameDetails) {
+            const myTurn = gameDetails.activePlayer.toLowerCase() === account.toLowerCase();
+            setIsMyTurn(myTurn);
+
+            // Check timeout - can only claim if it's NOT your turn and timeout confirmed
+            const timeLeft = await getTimeUntilTimeout();
+            console.log("DEBUG timeout:", {
+              myTurn,
+              timeLeft,
+              lastMoveTime: Number(gameDetails.lastMoveTime),
+              now: Math.floor(Date.now() / 1000),
+              canClaim: !myTurn && timeLeft !== null && timeLeft === 0
+            });
+            setTimeRemaining(timeLeft);
+            // Only allow claim if we got a valid response (not null) and it's 0
+            setCanClaimWin(!myTurn && timeLeft !== null && timeLeft === 0);
           }
         }
         void fetchBoard();
@@ -171,8 +214,32 @@ function App() {
       setCurrentGameId(0);
       setBoard(Array(9).fill(0));
       setWaitingForOpponent(false);
+      setPlayerSymbol(null);
+      setIsMyTurn(false);
+      setCanClaimWin(false);
+      setTimeRemaining(null);
     } catch (e) {
       alert("Cannot leave active game");
+      console.error(e);
+    }
+    setLoading(false);
+  };
+
+  const handleClaimWin = async () => {
+    setLoading(true);
+    try {
+      await claimWin();
+      alert("You claimed the win!");
+      setCurrentGameId(0);
+      setBoard(Array(9).fill(0));
+      setWaitingForOpponent(false);
+      setPlayerSymbol(null);
+      setIsMyTurn(false);
+      setCanClaimWin(false);
+      setTimeRemaining(null);
+      void loadLobby();
+    } catch (e) {
+      alert("Cannot claim win yet");
       console.error(e);
     }
     setLoading(false);
@@ -193,8 +260,13 @@ function App() {
           setCurrentGameId(0);
           setBoard(Array(9).fill(0));
           setWaitingForOpponent(false);
+          setPlayerSymbol(null);
+          setIsMyTurn(false);
+          setCanClaimWin(false);
+          setTimeRemaining(null);
           void loadLobby();
         } else {
+          setIsMyTurn(false); // After making a move, it's opponent's turn
           await fetchBoard();
         }
       }
@@ -223,9 +295,14 @@ function App() {
                 gameId={currentGameId}
                 board={board}
                 waitingForOpponent={waitingForOpponent}
+                playerSymbol={playerSymbol}
+                isMyTurn={isMyTurn}
+                canClaimWin={canClaimWin}
+                timeRemaining={timeRemaining}
                 onMove={handleMove}
                 onSync={fetchBoard}
                 onLeave={handleLeave}
+                onClaimWin={handleClaimWin}
               />
             )
           )}

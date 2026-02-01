@@ -121,3 +121,19 @@ export async function makeMove(position: number): Promise<void> {
   const tx = await contract.makeMove(position);
   await tx.wait();
 }
+
+export async function claimWin(): Promise<void> {
+  const contract = await getContract(true);
+  const tx = await contract.claimWin();
+  await tx.wait();
+}
+
+export async function getTimeUntilTimeout(): Promise<number | null> {
+  try {
+    const contract = await getContract(true); // Need signer for msg.sender
+    const time = await contract.timeUntilTimeout();
+    return Number(time);
+  } catch {
+    return null; // Return null on error, not 0
+  }
+}

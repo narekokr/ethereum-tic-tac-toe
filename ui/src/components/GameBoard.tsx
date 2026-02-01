@@ -2,12 +2,17 @@ interface GameBoardProps {
   gameId: number;
   board: number[];
   waitingForOpponent: boolean;
+  playerSymbol: 'X' | 'O' | null;
+  isMyTurn: boolean;
+  canClaimWin: boolean;
+  timeRemaining: number | null;
   onMove: (position: number) => void;
   onSync: () => void;
   onLeave: () => void;
+  onClaimWin: () => void;
 }
 
-export function GameBoard({ gameId, board, waitingForOpponent, onMove, onSync, onLeave }: GameBoardProps) {
+export function GameBoard({ gameId, board, waitingForOpponent, playerSymbol, isMyTurn, canClaimWin, timeRemaining, onMove, onSync, onLeave, onClaimWin }: GameBoardProps) {
   if (waitingForOpponent) {
     return (
       <div className="text-center animate-fadeIn">
@@ -41,7 +46,22 @@ export function GameBoard({ gameId, board, waitingForOpponent, onMove, onSync, o
         <span className="bg-indigo-100 text-indigo-700 px-4 py-1 rounded-full text-xs font-bold">
           Game ID: #{gameId}
         </span>
-        <h2 className="text-xl font-bold mt-2">Match in Progress</h2>
+        <div className="mt-3 flex justify-center gap-4">
+          <span className={`px-3 py-1 rounded-full text-sm font-bold ${
+            playerSymbol === 'X'
+              ? 'bg-indigo-100 text-indigo-700'
+              : 'bg-rose-100 text-rose-600'
+          }`}>
+            You are {playerSymbol}
+          </span>
+          <span className={`px-3 py-1 rounded-full text-sm font-bold ${
+            isMyTurn
+              ? 'bg-green-100 text-green-700'
+              : 'bg-amber-100 text-amber-700'
+          }`}>
+            {isMyTurn ? 'Your turn' : 'Waiting for opponent'}
+          </span>
+        </div>
       </div>
 
       <div className="grid grid-cols-3 gap-3 w-72 mx-auto mb-8">
@@ -61,6 +81,21 @@ export function GameBoard({ gameId, board, waitingForOpponent, onMove, onSync, o
           </div>
         ))}
       </div>
+
+      {!isMyTurn && timeRemaining !== null && timeRemaining > 0 && (
+        <p className="text-amber-600 text-sm mb-4">
+          Opponent has {Math.floor(timeRemaining / 60)}:{String(timeRemaining % 60).padStart(2, '0')} to make a move
+        </p>
+      )}
+
+      {canClaimWin && (
+        <button
+          onClick={onClaimWin}
+          className="bg-green-500 text-white py-3 px-6 rounded-2xl font-bold text-sm hover:bg-green-600 transition cursor-pointer mb-4"
+        >
+          Claim Win (Opponent Timed Out)
+        </button>
+      )}
 
       <button
         onClick={onSync}
