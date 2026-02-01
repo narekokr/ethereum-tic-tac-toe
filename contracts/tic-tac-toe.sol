@@ -48,11 +48,11 @@ contract TicTacToe {
     constructor() {}
 
     // Creates a game with custom buyin
-    function createGame(uint buyin2) public payable {
+    function createGame(uint buyin) public payable {
         require(playerToGame[msg.sender] == 0, "You already participate in a game");
-        require(msg.value == buyin2, "You have to pay the buy-in you declared");
+        require(msg.value == buyin, "You have to pay the buy-in you declared");
         uint8[9] memory board;
-        games[nextid] = Game(msg.sender,address(0),msg.sender,false,0,buyin2,board);
+        games[nextid] = Game(msg.sender,address(0),msg.sender,false,0,buyin,board);
         playerToGame[msg.sender] = nextid;
         nextid++;
         updatePendingGames();
@@ -242,4 +242,5 @@ contract TicTacToe {
         if (!games[id].gameActive || block.timestamp >= games[id].lastMoveTime + timeoutSec) return 0;
         return (games[id].lastMoveTime + timeoutSec) - block.timestamp;
     }
+
 }
