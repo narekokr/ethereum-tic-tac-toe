@@ -1,7 +1,7 @@
-export const CONTRACT_ADDRESS = "0xedE64A0Da3C4Ed6dF6DaB2595ff0D3d98E8F36Bc";
+export const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS as string;
 
 export const ABI = [
-  "function createGame(uint256 buyin2) public payable",
+  "function createGame(uint256 buyin) public payable",
   "function joinGame(uint256 id) public payable",
   "function leavePendingGame() public",
   "function makeMove(uint8 position) public",

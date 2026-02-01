@@ -11,10 +11,14 @@
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.18",
+    "@zerodev/ecdsa-validator": "^5.4.9",
+    "@zerodev/sdk": "^5.5.7",
     "ethers": "^6.16.0",
+    "permissionless": "^0.3.4",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "tailwindcss": "^4.1.18"
+    "tailwindcss": "^4.1.18",
+    "viem": "2.x"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
